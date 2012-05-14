@@ -267,6 +267,7 @@ cache_inode_new_entry(cache_inode_fsal_data_t *fsdata,
           goto out;
      }
      assert(new_entry->lru.refcount > 1);
+
      /* Now we got the entry; get the latch and see if someone raced us. */
      hrc = HashTable_GetLatch(fh_to_cache_entry_ht, &key, &value,
                               TRUE, &latch);
@@ -298,6 +299,7 @@ cache_inode_new_entry(cache_inode_fsal_data_t *fsdata,
      }
      entry = new_entry;
      latched = TRUE;
+     assert(fh_to_cache_entry_ht->partitions[latch.index].lock.__data.__writer);
      /* This should be the sentinel, plus one to use the entry we
         just returned. */
      lrurefed = TRUE;
@@ -329,6 +331,7 @@ cache_inode_new_entry(cache_inode_fsal_data_t *fsdata,
                   "cache_inode_new_entry: pthread_rwlock_init "
                   "returned %d (%s)", rc, strerror(rc));
           *status = CACHE_INODE_INIT_ENTRY_FAILED;
+     assert(fh_to_cache_entry_ht->partitions[latch.index].lock.__data.__writer);
           goto out;
      }
      locksinited = TRUE;
@@ -354,6 +357,7 @@ cache_inode_new_entry(cache_inode_fsal_data_t *fsdata,
                  sizeof(cache_inode_unstable_data_t));
           memset(&(entry->object.file.share_state), 0,
                  sizeof(cache_inode_share_t));
+     assert(fh_to_cache_entry_ht->partitions[latch.index].lock.__data.__writer);
           break;
 
      case DIRECTORY:
@@ -434,6 +438,8 @@ cache_inode_new_entry(cache_inode_fsal_data_t *fsdata,
 
      value.pdata = entry;
      value.len = sizeof(cache_entry_t);
+
+     assert(fh_to_cache_entry_ht->partitions[latch.index].lock.__data.__writer);
 
      rc = HashTable_SetLatched(fh_to_cache_entry_ht, &key, &value,
                                &latch, TRUE, NULL, NULL);

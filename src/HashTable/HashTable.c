@@ -48,6 +48,9 @@
 #include "stuff_alloc.h"
 #include "log.h"
 #include <assert.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <sys/syscall.h>
 
 #ifndef TRUE
 #define TRUE 1
@@ -365,6 +368,7 @@ HashTable_GetLatch(struct hash_table *ht,
           latch->locator = locator;
      } else {
           pthread_rwlock_unlock(&ht->partitions[index].lock);
+          assert(ht->partitions[index].lock.__data.__nr_readers < 1000);
      }
 
      return rc;
@@ -391,7 +395,10 @@ HashTable_ReleaseLatched(struct hash_table *ht,
                          struct hash_latch *latch)
 {
      if (latch) {
+          if(ht->partitions[latch->index].lock.__data.__writer) 
+              assert(ht->partitions[latch->index].lock.__data.__writer == (int)syscall (SYS_gettid));
           pthread_rwlock_unlock(&ht->partitions[latch->index].lock);
+          assert(ht->partitions[latch->index].lock.__data.__nr_readers < 1000);
           memset(latch, 0, sizeof(struct hash_latch));
      }
 
@@ -621,10 +628,12 @@ HashTable_Delall(struct hash_table *ht,
 
                if (rc == 0) {
                     pthread_rwlock_unlock(&ht->partitions[index].lock);
+                    assert(ht->partitions[index].lock.__data.__nr_readers < 1000);
                     return HASHTABLE_ERROR_DELALL_FAIL;
                }
           }
           pthread_rwlock_unlock(&ht->partitions[index].lock);
+          assert(ht->partitions[index].lock.__data.__nr_readers < 1000);
      }
 
      return HASHTABLE_SUCCESS;
