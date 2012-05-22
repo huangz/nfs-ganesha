@@ -39,6 +39,7 @@
 #include "fsal.h"
 #include "fsal_internal.h"
 #include "fsal_convert.h"
+#include <assert.h>
 
 /**
  * FSAL_lookup :
@@ -153,8 +154,15 @@ fsal_status_t GPFSFSAL_lookup(fsal_handle_t * p_parent_directory_handle,    /* I
     case FSAL_TYPE_XATTR:
       // not a directory 
       close(parentfd);
-      Return(ERR_FSAL_NOTDIR, 0, INDEX_FSAL_lookup);
 
+  {
+    unsigned int *fhP;
+    fhP = (int *)&(object_handle->data.handle.f_handle[0]);
+      LogCrit(COMPONENT_FSAL, "DMISS: type:%d parentfd:%d p_filename:%s handle:%08x %08x %08x %08x %08x %08x %08x\n",parent_dir_attrs.type, parentfd, p_filename->name, fhP[0],fhP[1],fhP[2],fhP[3],fhP[4],fhP[5],fhP[6]);
+    assert(0);
+ }
+     
+      Return(ERR_FSAL_NOTDIR, 0, INDEX_FSAL_lookup);
     default:
       close(parentfd);
       Return(ERR_FSAL_SERVERFAULT, 0, INDEX_FSAL_lookup);
@@ -200,6 +208,12 @@ fsal_status_t GPFSFSAL_lookup(fsal_handle_t * p_parent_directory_handle,    /* I
           FSAL_SET_MASK(p_object_attributes->asked_attributes, FSAL_ATTR_RDATTR_ERR);
         }
     }
+
+  {
+    unsigned int *fhP;
+    fhP = (int *)&(object_handle->data.handle.f_handle[0]);
+    LogCrit(COMPONENT_FSAL, "DMISS: parentfd:%d p_filename:%s handle:%08x %08x %08x %08x %08x %08x %08x\n", parentfd, p_filename->name, fhP[0],fhP[1],fhP[2],fhP[3],fhP[4],fhP[5],fhP[6]);
+  }
 
   /* lookup complete ! */
   Return(ERR_FSAL_NO_ERROR, 0, INDEX_FSAL_lookup);

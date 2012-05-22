@@ -103,6 +103,13 @@ fsal_status_t GPFSFSAL_opendir(fsal_handle_t * p_dir_handle,        /* IN */
 
   p_dir_descriptor->dir_offset = 0;
 
+  { 
+    unsigned int *fhP;
+    fhP = (int *)&(((gpfsfsal_handle_t *)p_dir_handle)->data.handle.f_handle[0]);
+    LogCrit(COMPONENT_FSAL, "DMISS: fd:%d handle:%08x %08x %08x %08x %08x %08x %08x\n", p_dir_descriptor->fd, fhP[0],fhP[1],fhP[2],fhP[3],fhP[4],fhP[5],fhP[6]);
+  } 
+
+
   Return(ERR_FSAL_NO_ERROR, 0, INDEX_FSAL_opendir);
 
 }

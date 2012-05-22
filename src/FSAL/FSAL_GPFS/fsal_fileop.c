@@ -186,6 +186,12 @@ fsal_status_t GPFSFSAL_open(fsal_handle_t * p_filehandle,   /* IN */
 
   /* set the read-only flag of the file descriptor */
   p_file_descriptor->ro = openflags & FSAL_O_RDONLY;
+  {
+    unsigned int *fhP;
+    fhP = (int *)&(((gpfsfsal_handle_t *)p_filehandle)->data.handle.f_handle[0]);
+    LogCrit(COMPONENT_FSAL, "DMISS: fd:%d handle:%08x %08x %08x %08x %08x %08x %08x\n", fd, fhP[0],fhP[1],fhP[2],fhP[3],fhP[4],fhP[5],fhP[6]);
+  }
+
 
   Return(ERR_FSAL_NO_ERROR, 0, INDEX_FSAL_open);
 
@@ -476,6 +482,8 @@ fsal_status_t GPFSFSAL_close(fsal_file_t * p_file_descriptor        /* IN */
 
   rc = close(((gpfsfsal_file_t *)p_file_descriptor)->fd);
   errsv = errno;
+
+  LogCrit(COMPONENT_FSAL, "DMISS: Closing fd:%d\n", ((gpfsfsal_file_t *)p_file_descriptor)->fd);
 
   ReleaseTokenFSCall();
 
