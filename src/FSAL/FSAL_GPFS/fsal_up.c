@@ -59,6 +59,7 @@ fsal_status_t GPFSFSAL_UP_GetEvents( fsal_up_event_t ** pevents,                
   struct stat64 buf;
   struct glock fl;
   struct callback_arg callback;
+  int cb_flags;
   cache_inode_fsal_data_t pfsal_data;
   fsal_handle_t *tmp_handlep = NULL;
   gpfsfsal_handle_t *phandle;
@@ -96,6 +97,7 @@ fsal_status_t GPFSFSAL_UP_GetEvents( fsal_up_event_t ** pevents,                
   callback.reason = &reason;
   callback.buf = &buf;
   callback.fl = &fl;
+  callback.flags = &cb_flags;
 
   rc = gpfs_ganesha(OPENHANDLE_INODE_UPDATE, &callback);
   if (rc != 0)
@@ -109,8 +111,9 @@ fsal_status_t GPFSFSAL_UP_GetEvents( fsal_up_event_t ** pevents,                
   LogDebug(COMPONENT_FSAL,
            "inode update: rc %d reason %d update ino %ld",
            rc, reason, callback.buf->st_ino);
-  LogDebug(COMPONENT_FSAL,
-           "inode update: tmp_handlep:%p callback.handle:%p  pfsal_data.fh_desc.start:%p handle size = %u handle_type:%d handle_version:%d key_size = %u f_handle:%p", tmp_handlep, callback.handle, pfsal_data.fh_desc.start,
+  LogCrit(COMPONENT_FSAL,
+           "inode update: tmp_handlep:%p flags:%x callback.handle:%p  pfsal_data.fh_desc.start:%p handle size = %u handle_type:%d handle_version:%d key_size = %u f_handle:%p", tmp_handlep, *callback.flags, callback.handle,
+           pfsal_data.fh_desc.start,
            callback.handle->handle_size,
            callback.handle->handle_type,
            callback.handle->handle_version,
@@ -120,7 +123,7 @@ fsal_status_t GPFSFSAL_UP_GetEvents( fsal_up_event_t ** pevents,                
   callback.handle->handle_version = OPENHANDLE_VERSION;
 
   // TODO: Workaround until we get new GPFS code.
-  callback.handle->handle_type = 7;
+	  callback.handle->handle_type = 7;
 
   fhP = (int *)&(callback.handle->f_handle[0]);
   LogDebug(COMPONENT_FSAL,
@@ -162,6 +165,17 @@ fsal_status_t GPFSFSAL_UP_GetEvents( fsal_up_event_t ** pevents,                
       (*pevents)->event_data.type.lock_grant.lock_param.lock_start = fl.flock.l_start;
       (*pevents)->event_data.type.lock_grant.lock_param.lock_type = fl.flock.l_type;
       (*pevents)->event_type = FSAL_UP_EVENT_LOCK_GRANT;
+    }
+  else if (reason == INODE_UPDATE) /* Lock Event */
+    {
+      LogCrit(COMPONENT_FSAL,
+              "inode update: flags:%x update ino %ld n_link:%d",
+              cb_flags, callback.buf->st_ino, (int)callback.buf->st_nlink);
+      (*pevents)->event_data.type.update.upu_flags = 0;
+      (*pevents)->event_data.type.update.upu_stat_buf = buf;
+      if (cb_flags & UP_NLINK)
+        (*pevents)->event_data.type.update.upu_flags |= FSAL_UP_NLINK;
+      (*pevents)->event_type = FSAL_UP_EVENT_UPDATE;
     }
   else /* Invalidate Event - Default */
     {

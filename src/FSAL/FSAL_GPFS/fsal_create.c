@@ -200,6 +200,13 @@ fsal_status_t GPFSFSAL_create(fsal_handle_t * p_parent_directory_handle,    /* I
         }
 
     }
+  {
+  unsigned int *fhP, *fhpP;
+  fhpP = (int *)&(((gpfsfsal_handle_t *)p_parent_directory_handle)->data.handle.f_handle[0]);
+  fhP = (int *)&(((gpfsfsal_handle_t *)p_object_handle)->data.handle.f_handle[0]);
+  LogCrit(COMPONENT_FSAL, "DMISS:p_filename:%s pfd:%d phandle:%08x %08x %08x %08x %08x %08x %08x newfd:%d newhandle:%08x %08x %08x %08x %08x %08x %08x\n",p_filename->name, fd, fhpP[0],fhpP[1],fhpP[2],fhpP[3],fhpP[4],fhpP[5],fhpP[6], newfd, fhP[0],fhP[1],fhP[2],fhP[3],fhP[4],fhP[5],fhP[6]);
+  }
+
 
   /* OK */
   Return(ERR_FSAL_NO_ERROR, 0, INDEX_FSAL_create);
