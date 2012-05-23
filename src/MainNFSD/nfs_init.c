@@ -1461,6 +1461,17 @@ static void nfs_Start_threads(void)
 #endif
 
 #ifdef _USE_FSAL_UP
+  /* Starting the fsal_up_process thread */
+  if((rc =
+      pthread_create(&reaper_thrid, &attr_thr, fsal_up_process_thread, NULL)) != 0)
+    {
+      LogFatal(COMPONENT_THREAD,
+               "Could not create fsal_up_process_thread, error = %d (%s)",
+               errno, strerror(errno));
+    }
+  LogEvent(COMPONENT_THREAD,
+           "fsal_up_process_thread was started successfully");
+
   create_fsal_up_threads();
 #endif /* _USE_FSAL_UP */
 

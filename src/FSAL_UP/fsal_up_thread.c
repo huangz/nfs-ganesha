@@ -34,9 +34,119 @@
 #include "nfs_core.h"
 #include "stuff_alloc.h"
 #include "log.h"
+#include "err_fsal.h"
 #include "fsal_up.h"
+#include "nfs_tcb.h"
 
 static int fsal_up_thread_exists(exportlist_t *entry);
+static struct glist_head       fsal_up_process_queue;
+nfs_tcb_t                      fsal_up_process_tcb;
+
+fsal_status_t  schedule_fsal_up_event_process(fsal_up_event_process_t *arg)
+{
+	int rc;
+	fsal_status_t ret = {0, 0};
+	LogFullDebug(COMPONENT_FSAL_UP, "Schedule %p", arg);
+	LogCrit(COMPONENT_FSAL_UP, "Schedule %p", arg);
+
+	P(fsal_up_process_tcb.tcb_mutex);
+	glist_add_tail(&fsal_up_process_queue, &arg->fue_list);
+	rc = pthread_cond_signal(&fsal_up_process_tcb.tcb_condvar);
+	if (rc == -1)
+	{
+		LogFullDebug(COMPONENT_FSAL_UP,
+				"Unable to signal FSAL_UP Process Thread");
+		glist_del(&arg->fue_list);
+		ret.major = ERR_FSAL_FAULT;
+	}
+	V(fsal_up_process_tcb.tcb_mutex);
+	return ret;
+}
+
+/* This thread processes FSAL UP events. */
+void *fsal_up_process_thread(void *UnUsedArg)
+{
+  struct timeval             now;
+  struct timespec            timeout;
+  fsal_up_event_process_t  * fupevent;
+
+  SetNameFunction("fsal_up_process_thread");
+
+  init_glist(&fsal_up_process_queue);
+  tcb_new(&fsal_up_process_tcb, "FSAL_UP Process Thread");
+
+  if (mark_thread_existing(&fsal_up_process_tcb) == PAUSE_EXIT)
+    {
+      /* Oops, that didn't last long... exit. */
+      mark_thread_done(&fsal_up_process_tcb);
+      LogDebug(COMPONENT_INIT,
+               "FSAL_UP Process Thread: Exiting before initialization");
+      return NULL;
+    }
+  //LogFullDebug(COMPONENT_FSAL_UP,
+  LogCrit(COMPONENT_FSAL_UP,
+               "FSAL_UP Process Thread: my pthread id is %p",
+               (caddr_t) pthread_self());
+  while(1)
+    {
+      /* Check without tcb lock*/
+      if ((fsal_up_process_tcb.tcb_state != STATE_AWAKE) ||
+          glist_empty(&fsal_up_process_queue))
+        {
+          while(1)
+            {
+              P(fsal_up_process_tcb.tcb_mutex);
+              if ((fsal_up_process_tcb.tcb_state == STATE_AWAKE) &&
+                  !glist_empty(&fsal_up_process_queue))
+                {
+                  V(fsal_up_process_tcb.tcb_mutex);
+                  break;
+                }
+              switch(thread_sm_locked(&fsal_up_process_tcb))
+                {
+                  case THREAD_SM_RECHECK:
+                  V(fsal_up_process_tcb.tcb_mutex);
+                  continue;
+
+                  case THREAD_SM_BREAK:
+                  if (glist_empty(&fsal_up_process_queue))
+                    {
+                      gettimeofday(&now, NULL);
+                      timeout.tv_sec = 10 + now.tv_sec;
+                      timeout.tv_nsec = 0;
+                      pthread_cond_timedwait(&fsal_up_process_tcb.tcb_condvar,
+                                             &fsal_up_process_tcb.tcb_mutex,
+                                             &timeout);
+                    }
+                  V(fsal_up_process_tcb.tcb_mutex);
+                  continue;
+
+                  case THREAD_SM_EXIT:
+                  V(fsal_up_process_tcb.tcb_mutex);
+                  return NULL;
+                }
+             }
+          }
+        P(fsal_up_process_tcb.tcb_mutex);
+        fupevent = glist_first_entry(&fsal_up_process_queue,
+                                     fsal_up_event_process_t,
+                                     fue_list);
+        if(fupevent != NULL)
+          {
+            /* Pull the event off of the list */
+            glist_del(&fupevent->fue_list);
+
+            /* Release the mutex */
+            V(fsal_up_process_tcb.tcb_mutex);
+            fupevent->fue_process_func(&fupevent->fue_data);
+            free(fupevent->fue_data.event_context.fsal_data.fh_desc.start);
+            free(fupevent);
+            continue;
+          }
+        V(fsal_up_process_tcb.tcb_mutex);
+    }
+  tcb_remove(&fsal_up_process_tcb);
+}
 
 void create_fsal_up_threads()
 {
@@ -155,77 +265,92 @@ void nfs_Init_FSAL_UP()
   return;
 }
 
-fsal_status_t process_event(fsal_up_event_t *event, fsal_up_event_functions_t *event_func)
+fsal_status_t process_event(fsal_up_event_t *fsal_event, fsal_up_event_functions_t *event_func)
 {
-  fsal_status_t status;
+  fsal_status_t status = {0, 0};
+  fsal_up_event_process_t  * event;
 
   /* FullDebug, convert fhandle to file path and print. */
+  event = (fsal_up_event_process_t *) malloc(sizeof(event));
+  if (event == NULL)
+    {
+      status.major = ERR_FSAL_NOMEM;
+      return status;
+    }
+  memset(event, 0, sizeof(event));
+
+  event->fue_data = fsal_event->event_data;
+  printf("event_data:%d: %p  fue_data:%d : %p\n",
+         (int)fsal_event->event_data.event_context.fsal_data.fh_desc.len,
+         fsal_event->event_data.event_context.fsal_data.fh_desc.start,
+         (int)event->fue_data.event_context.fsal_data.fh_desc.len,
+         event->fue_data.event_context.fsal_data.fh_desc.start);
 
   /* DEBUGGING */
-  switch(event->event_type)
+  switch(fsal_event->event_type)
     {
     case FSAL_UP_EVENT_CREATE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process CREATE event");
-      status = event_func->fsal_up_create(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_create;
       break;
     case FSAL_UP_EVENT_UNLINK:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process UNLINK event");
-      status = event_func->fsal_up_unlink(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_unlink;
       break;
     case FSAL_UP_EVENT_RENAME:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process RENAME event");
-      status = event_func->fsal_up_rename(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_rename;
       break;
     case FSAL_UP_EVENT_COMMIT:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process COMMIT event");
-      status = event_func->fsal_up_commit(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_commit;
       break;
     case FSAL_UP_EVENT_WRITE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process WRITE event");
-      status = event_func->fsal_up_write(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_write;
       break;
     case FSAL_UP_EVENT_LINK:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process LINK event");
-      status = event_func->fsal_up_link(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_link;
       break;
     case FSAL_UP_EVENT_LOCK_GRANT:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process LOCK GRANT event");
-      status = event_func->fsal_up_lock_grant(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_lock_grant;
       break;
     case FSAL_UP_EVENT_LOCK_AVAIL:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process LOCK AVAIL event");
-      status = event_func->fsal_up_lock_avail(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_lock_avail;
       break;
     case FSAL_UP_EVENT_OPEN:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process OPEN event");
-      status = event_func->fsal_up_open(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_open;
       break;
     case FSAL_UP_EVENT_CLOSE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process CLOSE event");
-      status = event_func->fsal_up_close(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_close;
       break;
     case FSAL_UP_EVENT_SETATTR:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process SETATTR event");
-      status = event_func->fsal_up_setattr(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_setattr;
       break;
     case FSAL_UP_EVENT_UPDATE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process UPDATE event");
-      status = event_func->fsal_up_update(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_update;
       break;
     case FSAL_UP_EVENT_INVALIDATE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process INVALIDATE event");
-      status = event_func->fsal_up_invalidate(&event->event_data);
+      event->fue_process_func = event_func->fsal_up_invalidate;
       break;
     default:
       LogDebug(COMPONENT_FSAL_UP, "Unknown FSAL UP event type found: %d",
-              event->event_type);
+              fsal_event->event_type);
+      free(event->fue_data.event_context.fsal_data.fh_desc.start);
+      free(event);
       ReturnCode(ERR_FSAL_NO_ERROR, 0);
     }
 
-  if (FSAL_IS_ERROR(status))
-    {
-      LogDebug(COMPONENT_FSAL_UP,"Error: Failed to process event");
-    }
+  status = schedule_fsal_up_event_process(event);
+
   return status;
 }
 
@@ -446,7 +571,7 @@ void *fsal_up_thread(void *Arg)
             }
           tmpevent = event;
           event = event->next_event;
-          free(tmpevent->event_data.event_context.fsal_data.fh_desc.start);
+    //      free(tmpevent->event_data.event_context.fsal_data.fh_desc.start);
 
           pthread_mutex_lock(fsal_up_context.event_pool_lock);
           ReleaseToPool(tmpevent, &nfs_param.fsal_up_param.event_pool);
