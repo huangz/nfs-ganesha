@@ -64,10 +64,11 @@ fsal_status_t dumb_fsal_up_update(fsal_up_event_data_t * pevdata)
 {
   cache_inode_status_t cache_status;
   cache_entry_t        * pentry = NULL;
-  fsal_attrib_list_t     attr;
+//  fsal_attrib_list_t     attr;
 
   LogCrit(COMPONENT_FSAL_UP,
            "FSAL_UP_DUMB: Entered dumb_fsal_up_update\n");
+#if JV
   if ((pevdata->type.update.upu_flags & FSAL_UP_NLINK) &&
       (pevdata->type.update.upu_stat_buf.st_nlink == 0) )
     {
@@ -88,6 +89,7 @@ fsal_status_t dumb_fsal_up_update(fsal_up_event_data_t * pevdata)
       cache_inode_close(pentry, NULL, CACHE_INODE_FLAG_REALLYCLOSE, &cache_status);
     }
   else
+#endif
     {
       cache_inode_invalidate(&pevdata->event_context.fsal_data,
                              &cache_status);

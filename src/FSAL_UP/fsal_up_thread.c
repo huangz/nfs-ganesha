@@ -72,6 +72,21 @@ void *fsal_up_process_thread(void *UnUsedArg)
 
   SetNameFunction("fsal_up_process_thread");
 
+#ifndef _NO_BUDDY_SYSTEM
+  {
+    int rc;
+
+    if((rc = BuddyInit(&nfs_param.buddy_param_fsal_up_process)) != BUDDY_SUCCESS)
+      {
+        /* Failed init */
+        LogFatal(COMPONENT_FSAL_UP,
+                 "fsal_up_process_thread: MemoryManager couldn't be initialized");
+      }
+    LogInfo(COMPONENT_FSAL_UP,
+            "fsal_up_process_thread: MemoryManager successfully initialized");
+  }
+#endif
+
   init_glist(&fsal_up_process_queue);
   tcb_new(&fsal_up_process_tcb, "FSAL_UP Process Thread");
 
@@ -138,9 +153,12 @@ void *fsal_up_process_thread(void *UnUsedArg)
 
             /* Release the mutex */
             V(fsal_up_process_tcb.tcb_mutex);
-            fupevent->fue_process_func(&fupevent->fue_data);
+    //        fupevent->fue_process_func(&fupevent->fue_data);
             free(fupevent->fue_data.event_context.fsal_data.fh_desc.start);
-            free(fupevent);
+  LogCrit(COMPONENT_FSAL_UP,
+               "XXX FSAL_UP Process Thread: start %p", fupevent->fue_data.event_context.fsal_data.fh_desc.start);
+            
+            Mem_Free(fupevent);
             continue;
           }
         V(fsal_up_process_tcb.tcb_mutex);
@@ -268,88 +286,90 @@ void nfs_Init_FSAL_UP()
 fsal_status_t process_event(fsal_up_event_t *fsal_event, fsal_up_event_functions_t *event_func)
 {
   fsal_status_t status = {0, 0};
-  fsal_up_event_process_t  * event;
+  fsal_up_event_process_t  * myevent;
 
   /* FullDebug, convert fhandle to file path and print. */
-  event = (fsal_up_event_process_t *) malloc(sizeof(event));
-  if (event == NULL)
+  myevent = (fsal_up_event_process_t *) Mem_Alloc(sizeof(myevent));
+  if (myevent == NULL)
     {
       status.major = ERR_FSAL_NOMEM;
       return status;
     }
-  memset(event, 0, sizeof(event));
+  memset(myevent, 0, sizeof(myevent));
 
-  event->fue_data = fsal_event->event_data;
-  printf("event_data:%d: %p  fue_data:%d : %p\n",
-         (int)fsal_event->event_data.event_context.fsal_data.fh_desc.len,
+  myevent->fue_data = fsal_event->event_data;
+  LogCrit(COMPONENT_FSAL_UP,"XXX event_data:%p:%p:%d:%p  fue_data:%p:%p:%d:%p\n",
+         fsal_event,&fsal_event->event_data,(int)fsal_event->event_data.event_context.fsal_data.fh_desc.len,
          fsal_event->event_data.event_context.fsal_data.fh_desc.start,
-         (int)event->fue_data.event_context.fsal_data.fh_desc.len,
-         event->fue_data.event_context.fsal_data.fh_desc.start);
+         myevent, &myevent->fue_data,(int)myevent->fue_data.event_context.fsal_data.fh_desc.len,
+         myevent->fue_data.event_context.fsal_data.fh_desc.start);
 
   /* DEBUGGING */
   switch(fsal_event->event_type)
     {
     case FSAL_UP_EVENT_CREATE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process CREATE event");
-      event->fue_process_func = event_func->fsal_up_create;
+      myevent->fue_process_func = event_func->fsal_up_create;
       break;
     case FSAL_UP_EVENT_UNLINK:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process UNLINK event");
-      event->fue_process_func = event_func->fsal_up_unlink;
+      myevent->fue_process_func = event_func->fsal_up_unlink;
       break;
     case FSAL_UP_EVENT_RENAME:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process RENAME event");
-      event->fue_process_func = event_func->fsal_up_rename;
+      myevent->fue_process_func = event_func->fsal_up_rename;
       break;
     case FSAL_UP_EVENT_COMMIT:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process COMMIT event");
-      event->fue_process_func = event_func->fsal_up_commit;
+      myevent->fue_process_func = event_func->fsal_up_commit;
       break;
     case FSAL_UP_EVENT_WRITE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process WRITE event");
-      event->fue_process_func = event_func->fsal_up_write;
+      myevent->fue_process_func = event_func->fsal_up_write;
       break;
     case FSAL_UP_EVENT_LINK:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process LINK event");
-      event->fue_process_func = event_func->fsal_up_link;
+      myevent->fue_process_func = event_func->fsal_up_link;
       break;
     case FSAL_UP_EVENT_LOCK_GRANT:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process LOCK GRANT event");
-      event->fue_process_func = event_func->fsal_up_lock_grant;
+      myevent->fue_process_func = event_func->fsal_up_lock_grant;
       break;
     case FSAL_UP_EVENT_LOCK_AVAIL:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process LOCK AVAIL event");
-      event->fue_process_func = event_func->fsal_up_lock_avail;
+      myevent->fue_process_func = event_func->fsal_up_lock_avail;
       break;
     case FSAL_UP_EVENT_OPEN:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process OPEN event");
-      event->fue_process_func = event_func->fsal_up_open;
+      myevent->fue_process_func = event_func->fsal_up_open;
       break;
     case FSAL_UP_EVENT_CLOSE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process CLOSE event");
-      event->fue_process_func = event_func->fsal_up_close;
+      myevent->fue_process_func = event_func->fsal_up_close;
       break;
     case FSAL_UP_EVENT_SETATTR:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process SETATTR event");
-      event->fue_process_func = event_func->fsal_up_setattr;
+      myevent->fue_process_func = event_func->fsal_up_setattr;
       break;
     case FSAL_UP_EVENT_UPDATE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process UPDATE event");
-      event->fue_process_func = event_func->fsal_up_update;
+      myevent->fue_process_func = event_func->fsal_up_update;
       break;
     case FSAL_UP_EVENT_INVALIDATE:
       LogDebug(COMPONENT_FSAL_UP, "FSAL_UP: Process INVALIDATE event");
-      event->fue_process_func = event_func->fsal_up_invalidate;
+      myevent->fue_process_func = event_func->fsal_up_invalidate;
       break;
     default:
       LogDebug(COMPONENT_FSAL_UP, "Unknown FSAL UP event type found: %d",
               fsal_event->event_type);
-      free(event->fue_data.event_context.fsal_data.fh_desc.start);
-      free(event);
+      //free(myevent->fue_data.event_context.fsal_data.fh_desc.start);
+  LogCrit(COMPONENT_FSAL_UP,
+               "XXX process_event: start %p", myevent->fue_data.event_context.fsal_data.fh_desc.start);
+      Mem_Free(myevent);
       ReturnCode(ERR_FSAL_NO_ERROR, 0);
     }
 
-  status = schedule_fsal_up_event_process(event);
+  status = schedule_fsal_up_event_process(myevent);
 
   return status;
 }

@@ -644,6 +644,7 @@ void nfs_set_param_default()
   Buddy_set_default_parameter(&nfs_param.buddy_param_tcp_mgr);
 #ifdef _USE_FSAL_UP
   Buddy_set_default_parameter(&nfs_param.buddy_param_fsal_up);
+  Buddy_set_default_parameter(&nfs_param.buddy_param_fsal_up_process);
 #endif /* _USE_FSAL_UP */
 #endif /* _NO_BUDDY_SYSTEM */
 

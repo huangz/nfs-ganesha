@@ -374,6 +374,7 @@ typedef struct nfs_param__
   buddy_parameter_t buddy_param_admin;
   buddy_parameter_t buddy_param_tcp_mgr;
   buddy_parameter_t buddy_param_fsal_up;
+  buddy_parameter_t buddy_param_fsal_up_process;
 #endif
 
 } nfs_parameter_t;

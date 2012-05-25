@@ -68,6 +68,7 @@ fsal_status_t GPFSFSAL_UP_GetEvents( fsal_up_event_t ** pevents,                
   cache_inode_fsal_data_t *event_fsal_data;
 
   tmp_handlep = malloc(sizeof(fsal_handle_t));
+      LogCrit(COMPONENT_FSAL, "XXX: tmp_handle:%p\n", tmp_handlep);
   if (tmp_handlep == NULL)
     {
       LogCrit(COMPONENT_FSAL, "Error: Could not malloc ... ENOMEM");
