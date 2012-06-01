@@ -209,6 +209,9 @@ fsal_status_t PTFSAL_open(fsal_handle_t * p_filehandle,   /* IN */
   p_file_descriptor->export_id = handler.export_id;
   p_file_descriptor->uid = handler.uid;
   p_file_descriptor->gid = handler.gid;
+  /* Maybe there is an issue?  */
+  // p_file_descriptor->client_address = inet_ntoa(((struct sockaddr_in *)(&(fsi_op_context->credential.caller_addr)))->sin_addr);
+  
   errsv = errno;
   ReleaseTokenFSCall();
 
