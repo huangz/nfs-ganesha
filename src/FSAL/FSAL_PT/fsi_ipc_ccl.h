@@ -1,4 +1,4 @@
-// ----------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 // Copyright IBM Corp. 2010, 2012
 // All Rights Reserved
 // ----------------------------------------------------------------------------
@@ -58,6 +58,7 @@ extern "C" {
 #define CCL_ON_DEMAND_HANDLE_TIMEOUT_SEC       15   // Timeout for on-demand
                                                     // thread looking for
                                                     // handles to close
+
 
 // FSI IPC getlock constants
 #define FSI_IPC_GETLOCK_PTYPE                  2
@@ -655,6 +656,7 @@ int wait_for_response(const int                   msg_id,
                       const size_t                msg_size,
                       const long                  msg_type,
                       const struct CommonMsgHdr * p_hdr,
+                      const uint64_t              transaction_id,
                       const uint64_t              transaction_type,
                       const int                   min_rsp_msg_bytes);
 int send_msg(int          msg_id,
@@ -864,7 +866,7 @@ int ccl_fsal_try_fastopen_by_index(ccl_context_t       * handle,
                                    char                * fsal_name);
 int ccl_find_oldest_handle();
 bool ccl_can_close_handle(int handle_index,
-			  int timeout);
+                          int timeout);
 
 // ---------------------------------------------------------------------------
 // CCL Up Call ptorotypes - both the Samba VFS layer and the Ganesha PTFSAL
@@ -881,16 +883,17 @@ extern pthread_mutex_t g_dir_mutex;
 // acl handle mutex
 extern pthread_mutex_t g_acl_mutex;
 // file handle processing mutex
-extern pthread_mutex_t g_handle_mutex;
+extern pthread_mutex_t g_file_mutex;
 // only one thread can parse an io at a time
 extern pthread_mutex_t g_parseio_mutex;
 // only one thread can change global transid at a time
-extern pthread_mutex_t g_transid_mutex;
 extern pthread_mutex_t g_non_io_mutex;
 extern pthread_mutex_t g_statistics_mutex;
 extern pthread_mutex_t g_close_mutex[FSI_MAX_STREAMS + FSI_CIFS_RESERVED_STREAMS];
-// Global I/O mutex
-extern pthread_mutex_t g_io_mutex;
+extern pthread_mutex_t g_io_handle_mutex[];
+extern pthread_mutex_t g_dir_handle_mutex[];
+extern pthread_mutex_t g_io_operation_mutex[];
+
 #endif // ifndef __FSI_IPC_CCL_H__
 
 #ifdef __cplusplus

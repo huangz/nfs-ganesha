@@ -56,13 +56,11 @@
 
 pthread_mutex_t g_dir_mutex; // dir handle mutex
 pthread_mutex_t g_acl_mutex; // acl handle mutex
-pthread_mutex_t g_handle_mutex; // file handle processing mutex
+pthread_mutex_t g_file_mutex; // file handle processing mutex
 pthread_mutex_t g_parseio_mutex; // only one thread can parse an io at a time
 // only one thread can change global transid at a time
-pthread_mutex_t g_transid_mutex; 
 pthread_mutex_t g_non_io_mutex;
 pthread_mutex_t g_close_mutex[FSI_MAX_STREAMS + FSI_CIFS_RESERVED_STREAMS];
-pthread_mutex_t g_io_mutex;
 pthread_mutex_t g_statistics_mutex;
 pthread_t g_pthread_closehandle_lisetner;
 pthread_t g_pthread_polling_closehandler;
@@ -126,12 +124,10 @@ PTFSAL_Init(fsal_parameter_t * init_info    /* IN */)
   /* init mutexes */
   pthread_mutex_init(&g_dir_mutex,NULL);
   pthread_mutex_init(&g_acl_mutex,NULL);
-  pthread_mutex_init(&g_handle_mutex,NULL);
+  pthread_mutex_init(&g_file_mutex,NULL);
   pthread_mutex_init(&g_non_io_mutex,NULL);
   pthread_mutex_init(&g_parseio_mutex,NULL);
-  pthread_mutex_init(&g_transid_mutex,NULL);
-  pthread_mutex_init(&g_fsi_name_handle_mutex, NULL);
-  pthread_mutex_init(&g_io_mutex, NULL);
+  pthread_mutex_init(&g_fsi_cache_handle_mutex, NULL);
   pthread_mutex_init(&g_statistics_mutex, NULL);
   g_fsi_name_handle_cache.m_count = 0;
   for (i=0; i<FSI_MAX_STREAMS + FSI_CIFS_RESERVED_STREAMS; i++) {
@@ -247,7 +243,7 @@ PTFSAL_terminate()
   CLOSE_THREAD_MAP parallelCloseThreadMap[FSI_MAX_STREAMS + FSI_CIFS_RESERVED_STREAMS];
  
   FSI_TRACE(FSI_NOTICE, "Terminating FSAL_PT");
-  rc = ccl_up_mutex_lock(&g_handle_mutex);
+  rc = ccl_up_mutex_lock(&g_file_mutex);
   if (rc != 0) {
     FSI_TRACE(FSI_ERR, "Failed to lock handle mutex");
     minor = 1;
@@ -289,7 +285,7 @@ PTFSAL_terminate()
     }
   }
 
-  ccl_up_mutex_unlock(&g_handle_mutex);
+  ccl_up_mutex_unlock(&g_file_mutex);
   for (index = FSI_CIFS_RESERVED_STREAMS;
        index < FSI_MAX_STREAMS + FSI_CIFS_RESERVED_STREAMS;
        index++) {
