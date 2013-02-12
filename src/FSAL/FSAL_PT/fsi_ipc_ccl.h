@@ -319,8 +319,6 @@ struct file_handle_t {
                                               // if m_dir_not_file_flag is
                                               // set
   uint64_t               m_resourceHandle;    // handle for resource management
-//  pthread_mutex_t        m_io_mutex;          // used to manage multithread
-//                                              // NFS io operations
   struct timeval         m_perf_pwrite_start[MAX_FSI_PERF_COUNT];
   struct timeval         m_perf_pwrite_end[MAX_FSI_PERF_COUNT];
   struct timeval         m_perf_aio_start[MAX_FSI_PERF_COUNT];
@@ -603,7 +601,10 @@ int ccl_cache_name_and_handle(char *handle, char *name);
 int ccl_check_handle_index (int handle_index);
 int ccl_find_handle_by_name_and_export(const char * filename,
                                        ccl_context_t * handle);
-int ccl_find_dir_handle_by_name_and_export(const char * filename,
+int ccl_update_cache_stat(const char * filename, 
+                          uint64_t     newMode,
+                          uint64_t     export_id); 
+int ccl_find_dir_handle_by_name_and_export(const char   * filename,
                                           ccl_context_t * handle);
 int ccl_set_stat_buf(fsi_stat_struct              * dest,
                      const struct ClientOpStatRsp * src);
@@ -768,7 +769,8 @@ int update_read_status(struct file_handle_t        * p_pread_hndl,
                        struct CommonMsgHdr         * p_pread_hdr,
                        struct ClientOpPreadReqMsg  * p_pread_req,
                        const ccl_context_t         * handle,
-                       uint64_t                      max_readahead_offset);
+                       uint64_t                      max_readahead_offset,
+                       int                         * p_combined_rc);
 int verify_io_response(int                      transaction_type,
                        int                      cur_index,
                        struct CommonMsgHdr           * p_msg_hdr,
@@ -866,6 +868,7 @@ int ccl_fsal_try_fastopen_by_index(ccl_context_t       * handle,
 int ccl_find_oldest_handle();
 bool ccl_can_close_handle(int handle_index,
                           int timeout);
+int ccl_implicit_close_for_nfs(int handle_index_to_close, int close_style);
 
 // ---------------------------------------------------------------------------
 // CCL Up Call ptorotypes - both the Samba VFS layer and the Ganesha PTFSAL
@@ -883,19 +886,15 @@ extern pthread_mutex_t g_dir_mutex;
 extern pthread_mutex_t g_acl_mutex;
 // file handle processing mutex
 extern pthread_mutex_t g_file_mutex;
-// only one thread can parse an io at a time
-extern pthread_mutex_t g_parseio_mutex;
-// only one thread can change global transid at a time
-extern pthread_mutex_t g_non_io_mutex;
 extern pthread_mutex_t g_statistics_mutex;
-extern pthread_mutex_t g_close_mutex[FSI_MAX_STREAMS + FSI_CIFS_RESERVED_STREAMS];
-// Global I/O mutex
-// extern pthread_mutex_t g_io_mutex;
+extern pthread_mutex_t g_parseio_mutex;
 // Per stream fsync and ftrunc mutex
 // used to control concurrent i/o on stream during
 // fsync or ftrunc
 extern pthread_mutex_t g_io_handle_mutex[];
 extern pthread_mutex_t g_dir_handle_mutex[];
+extern pthread_mutex_t g_io_operation_mutex[];
+// this mutex is used for locking between get handle and lock the handle.   
 
 #endif // ifndef __FSI_IPC_CCL_H__
 

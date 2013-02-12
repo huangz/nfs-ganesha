@@ -48,9 +48,9 @@
                                                // polling for handle to 
                                                // close in the
                                                // background
-extern int             debug_flag;
-extern struct          fsi_handle_cache_t  g_fsi_name_handle_cache;
-extern pthread_mutex_t g_fsi_cache_handle_mutex;
+extern int               debug_flag;
+extern struct            fsi_handle_cache_t  g_fsi_name_handle_cache;
+extern pthread_rwlock_t  g_fsi_cache_handle_rw_lock;
 
 void fsi_get_whole_path(const char * parentPath,
                         const char * name,
